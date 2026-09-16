@@ -53,9 +53,12 @@ export class Bot {
     this.strafe = 0;
     this.strafeT = 0;
     this.jumpCd = 0;
+    this.blindT = 0;
+    this.meleeCd = 0;
     // a little personality: who pushes the street, who flanks, who holds a window
     this.style = choice(['pusher', 'pusher', 'flanker', 'camper']);
     this.post = -1;
+    this.objective = -1;
 
     this.model = new Soldier(team, name, WEAPONS[weaponId].kind);
     scene.add(this.model.group);
@@ -78,6 +81,7 @@ export class Bot {
     this.goal = -1;
     this.post = -1;
     this.grenades = 2;
+    this.blindT = 0;
     this.model.dead = false;
     this.model.body.rotation.set(0, yaw, 0);
     this.model.body.position.y = 0;
@@ -113,6 +117,11 @@ export class Bot {
   }
 
   _perceive(W, dt) {
+    if (this.blindT > 0) {                    // flashbanged: eyes shut
+      this.target = null;
+      if (this.state === 'fight') this.state = 'hunt';
+      return;
+    }
     this.think -= dt;
     if (this.think > 0) return;
     this.think = 0.12 + Math.random() * 0.1;
@@ -152,6 +161,11 @@ export class Bot {
 
   _pickGoal(W) {
     const nav = W.nav;
+    // game modes can pin an objective on a bot (a Domination flag, say)
+    if (this.objective >= 0 && this.objective !== undefined && Math.random() < 0.85) {
+      this.goal = this.objective;
+      return;
+    }
     if (this.state === 'fight' && this.target) {
       const want = this._wantCover(W)
         ? this._coverNode(W)
@@ -251,10 +265,20 @@ export class Bot {
       return;
     }
 
+    if (W.warmup > 0) {                     // pre-match freeze
+      this.model.update({
+        x: this.pos.x, y: this.pos.y, z: this.pos.z,
+        yaw: this.yaw, pitch: 0, speed: 0, crouch: false, dead: false,
+      }, dt);
+      return;
+    }
+
     this.weapon.tick(dt);
     this._perceive(W, dt);
     this.grenadeCd -= dt;
     this.jumpCd -= dt;
+    this.meleeCd -= dt;
+    if (this.blindT > 0) this.blindT -= dt;
     if (this.style === 'camper') {
       this.postT = (this.postT || rand(26, 12)) - dt;
       if (this.postT <= 0) { this.postT = rand(30, 14); this.post = -1; }
@@ -302,6 +326,14 @@ export class Bot {
       }
       if (dist > 26 && this.weapon.w.kind === 'sniper') wantCrouch = Math.random() < 0.5;
       if (dist > 30) sprint = true;
+
+      // knife range: stop shooting and stab
+      if (dist < 2.1 && this.meleeCd <= 0 &&
+          W.collider.los(this.eye.x, this.eye.y, this.eye.z, t.pos.x, t.pos.y + t.height * 0.6, t.pos.z)) {
+        this.meleeCd = 1.1;
+        W.sfx.swing(this.pos);
+        W.damage(t, 150, this, 'chest', 'COUTEAU');
+      }
 
       // grenades
       if (this.grenades > 0 && this.grenadeCd <= 0 && dist > 9 && dist < 26 &&
@@ -358,7 +390,7 @@ export class Bot {
 
     /* ---- trigger discipline ---- */
     let shooting = false;
-    if (t && this.reactT <= 0 && this.weapon.reloading <= 0) {
+    if (t && this.reactT <= 0 && this.weapon.reloading <= 0 && this.blindT <= 0) {
       const e = this.eye;
       const dx = t.pos.x - e.x, dy = t.pos.y + t.height * 0.7 - e.y, dz = t.pos.z - e.z;
       const len = Math.hypot(dx, dy, dz);

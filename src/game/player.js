@@ -8,6 +8,7 @@ import { CHEATS, aimbotStep } from './cheats.js';
 const WALK = 4.6, SPRINT = 6.8, CROUCH_SPEED = 2.3, ADS_SPEED = 3.1;
 const ACCEL = 13, AIR_ACCEL = 2.2, FRICTION = 11, GRAVITY = 21, JUMP = 7.0;
 const STAND_H = 1.8, CROUCH_H = 1.25;
+const MELEE = { time: 0.55, hitAt: 0.2, range: 2.4, damage: 150 };
 const EYE_STAND = 1.64, EYE_CROUCH = 1.02;
 
 export class Player {
@@ -41,6 +42,11 @@ export class Player {
     };
     this.slot = 'primary';
     this.grenades = 2;
+    this.flashbangs = 1;
+    this.meleeT = 0;
+    this.meleeHit = false;
+    this.blindT = 0;
+    this.blindMax = 1;
     this.ads = false;
     this.adsBlend = 0;
     this.sprinting = false;
@@ -80,6 +86,9 @@ export class Player {
     this.crouch = false;
     this.height = STAND_H;
     this.grenades = 2;
+    this.flashbangs = 1;
+    this.meleeT = 0;
+    this.blindT = 0;
     this.slot = 'primary';
     this.weapons.primary.set(this.loadout.primary);
     this.weapons.secondary.set(this.loadout.secondary);
@@ -193,6 +202,67 @@ export class Player {
     this.sfx.click(700, 0.2, 0.08);
   }
 
+  /** Knife: fast, lethal, and it has to connect in front of you. */
+  _melee(W) {
+    if (this.meleeT > 0) return;
+    this.meleeT = MELEE.time;
+    this.meleeHit = false;
+    this.sfx.swing(this.pos);
+  }
+
+  _meleeStrike(W) {
+    const eye = this.eye;
+    const cp = Math.cos(this.pitch);
+    const dir = {
+      x: -Math.sin(this.yaw) * cp,
+      y: Math.sin(this.pitch),
+      z: -Math.cos(this.yaw) * cp,
+    };
+    const enemies = W.actors.filter((a) => a !== this && a.alive && a.team !== this.team);
+    // a generous cone: anything within reach and roughly in front
+    let best = null, bestD = MELEE.range;
+    for (const a of enemies) {
+      const dx = a.pos.x - eye.x, dy = a.pos.y + a.height * 0.6 - eye.y, dz = a.pos.z - eye.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d > bestD) continue;
+      const dot = (dx * dir.x + dy * dir.y + dz * dir.z) / (d || 1);
+      if (dot < 0.6) continue;
+      if (!W.collider.los(eye.x, eye.y, eye.z, a.pos.x, a.pos.y + a.height * 0.6, a.pos.z)) continue;
+      bestD = d; best = a;
+    }
+    if (!best) return;
+    this.effects.blood({ x: best.pos.x, y: best.pos.y + best.height * 0.7, z: best.pos.z }, dir);
+    const killed = W.damage(best, MELEE.damage, this, 'chest', 'COUTEAU');
+    W.onHitmarker(killed);
+    this.sfx.impact(best.pos, 'flesh');
+  }
+
+  _throwFlash(W) {
+    if (this.flashbangs <= 0 || this.throwT > 0) return;
+    this.flashbangs--;
+    this.throwT = 0.6;
+    const cp = Math.cos(this.pitch);
+    const dir = {
+      x: -Math.sin(this.yaw) * cp,
+      y: Math.sin(this.pitch) + 0.16,
+      z: -Math.cos(this.yaw) * cp,
+    };
+    const o = this.eye;
+    W.throwGrenade(
+      { x: o.x + dir.x * 0.5, y: o.y - 0.1, z: o.z + dir.z * 0.5 },
+      dir, this, 1, 'flash',
+    );
+    this.sfx.click(1200, 0.2, 0.07);
+  }
+
+  /** @param {number} strength seconds of blindness */
+  flashBlind(strength) {
+    if (strength <= this.blindT) return;
+    this.blindT = strength;
+    this.blindMax = Math.max(0.3, strength);
+    this.sfx.duck(Math.min(4, strength), 0.25);
+  }
+
   /* -------------------------------- update ------------------------------- */
 
   update(dt, input, W) {
@@ -245,7 +315,8 @@ export class Player {
     );
 
     /* ---- intent ---- */
-    const ax = input.moveAxis();
+    const frozen = W.warmup > 0;
+    const ax = frozen ? { x: 0, y: 0, moving: false } : input.moveAxis();
     const wantCrouch = input.any('ControlLeft', 'ControlRight', 'KeyC');
     const canSprint = ax.y > 0.4 && !wantCrouch && !this.ads && st.reloading <= 0;
     this.sprinting = canSprint && input.any('ShiftLeft', 'ShiftRight');
@@ -267,6 +338,16 @@ export class Player {
     this.ads = input.buttons[2] && st.reloading <= 0 && this.throwT <= 0;
     this.adsBlend = smooth(this.adsBlend, this.ads ? 1 : 0, 1 / Math.max(0.04, st.w.adsTime) * 0.9, dt);
 
+    if (frozen) {
+      // pre-match: look around, nothing else
+      this.sprinting = false;
+      this.vel.x = 0; this.vel.z = 0;
+      this.vel.y -= GRAVITY * dt;
+      W.collider.move(this.pos, this.vel, dt, 0.33, this.height, 0.45);
+      this._postMove(dt, input, W, false);
+      return;
+    }
+
     if (input.anyHit('KeyR')) st.startReload();
     if (input.anyHit('Digit1')) this.switchSlot('primary');
     if (input.anyHit('Digit2')) this.switchSlot('secondary');
@@ -276,11 +357,27 @@ export class Player {
       if (m) this.sfx.click(1400, 0.16, 0.05);
     }
     if (input.anyHit('KeyG')) this._throwGrenade(W);
+    if (input.anyHit('KeyF')) this._throwFlash(W);
+    if (input.anyHit('KeyV')) this._melee(W);
+    if (input.anyHit('Digit4')) W.useStreak?.(this);
+
+    /* ---- melee timing ---- */
+    if (this.meleeT > 0) {
+      const prev = this.meleeT;
+      this.meleeT = Math.max(0, this.meleeT - dt);
+      if (!this.meleeHit && prev > MELEE.time - MELEE.hitAt && this.meleeT <= MELEE.time - MELEE.hitAt) {
+        this.meleeHit = true;
+        this._meleeStrike(W);
+      }
+    }
+
+    /* ---- flash blindness ---- */
+    if (this.blindT > 0) this.blindT = Math.max(0, this.blindT - dt);
 
     /* ---- shooting ---- */
     const trigger = input.buttons[0] || autoFire;
     const pressed = input.clicked[0] || autoFire;
-    if (st.ready(trigger, pressed) && this.swapT <= 0 && this.throwT <= 0) {
+    if (st.ready(trigger, pressed) && this.swapT <= 0 && this.throwT <= 0 && this.meleeT <= 0) {
       this._shoot(W);
     } else if (input.clicked[0] && st.empty && st.reloading <= 0) {
       this.sfx.click(900, 0.2, 0.05);
@@ -415,6 +512,7 @@ export class Player {
       grounded: this.grounded,
       sprinting: this.sprinting,
       reloadFrac: st.reloading > 0 ? st.reloading / st.w.reload : 0,
+      meleeFrac: this.meleeT > 0 ? this.meleeT / MELEE.time : 0,
       lookDx: this._look.yaw,
       lookDy: this._look.pitch,
     });

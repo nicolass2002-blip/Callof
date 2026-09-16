@@ -257,6 +257,164 @@ export class Sfx {
     src.stop(t + 0.32);
   }
 
+  /**
+   * Positioned looping voice (helicopter rotor, desert wind).
+   * Returns a handle: {setPosition, setGain, stop}.
+   */
+  startLoop(kind) {
+    if (!this.ctx) return { setPosition() {}, setGain() {}, stop() {} };
+    const t = this.ctx.currentTime;
+    const out = this.ctx.createGain();
+    out.gain.value = 0;
+    const pan = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : null;
+    if (pan) out.connect(pan).connect(this.master);
+    else out.connect(this.master);
+
+    const parts = [];
+    if (kind === 'rotor') {
+      // blade slap: band-passed noise chopped by a saw LFO, plus a low thump
+      const src = this._noiseSrc(1);
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = 260; bp.Q.value = 1.1;
+      const chop = this.ctx.createGain();
+      chop.gain.value = 0.35;
+      const lfo = this.ctx.createOscillator();
+      lfo.type = 'sawtooth'; lfo.frequency.value = 12.5;
+      const lfoAmt = this.ctx.createGain();
+      lfoAmt.gain.value = 0.6;
+      lfo.connect(lfoAmt).connect(chop.gain);
+      lfo.start(t);
+      src.connect(bp).connect(chop).connect(out);
+
+      const thump = this.ctx.createOscillator();
+      thump.type = 'sine'; thump.frequency.value = 58;
+      const tg = this.ctx.createGain();
+      tg.gain.value = 0.18;
+      const lfo2 = this.ctx.createOscillator();
+      lfo2.type = 'sine'; lfo2.frequency.value = 12.5;
+      const lfo2Amt = this.ctx.createGain();
+      lfo2Amt.gain.value = 0.16;
+      lfo2.connect(lfo2Amt).connect(tg.gain);
+      lfo2.start(t);
+      thump.connect(tg).connect(out);
+      thump.start(t);
+      parts.push(src, lfo, lfo2, thump);
+    } else {                                    // wind
+      const src = this._noiseSrc(0.35);
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = 'lowpass'; lp.frequency.value = 480;
+      const g = this.ctx.createGain();
+      g.gain.value = 0.5;
+      const lfo = this.ctx.createOscillator();
+      lfo.type = 'sine'; lfo.frequency.value = 0.09;
+      const amt = this.ctx.createGain();
+      amt.gain.value = 0.32;
+      lfo.connect(amt).connect(g.gain);
+      lfo.start(t);
+      src.connect(lp).connect(g).connect(out);
+      parts.push(src, lfo);
+    }
+
+    const handle = {
+      setGain: (v, ramp = 0.25) => {
+        const now = this.ctx.currentTime;
+        out.gain.cancelScheduledValues(now);
+        out.gain.setTargetAtTime(Math.max(0, v), now, ramp);
+      },
+      setPosition: (at, maxDist = 120) => {
+        const dx = at.x - this.listener.x, dz = at.z - this.listener.z;
+        const dist = Math.hypot(dx, dz);
+        const att = Math.max(0, 1 - dist / maxDist) ** 1.4;
+        handle.setGain(att * (kind === 'rotor' ? 0.85 : 0.3), 0.12);
+        if (pan && dist > 0.3) {
+          const rx = -this.listener.fz, rz = this.listener.fx;
+          pan.pan.value = Math.max(-1, Math.min(1, ((dx * rx + dz * rz) / dist) * 0.8));
+        }
+      },
+      stop: () => {
+        handle.setGain(0, 0.12);
+        setTimeout(() => {
+          for (const p of parts) { try { p.stop(); } catch { /* already stopped */ } }
+          try { out.disconnect(); } catch { /* already gone */ }
+        }, 500);
+      },
+    };
+    return handle;
+  }
+
+  /** Muffle everything for a moment (flashbang) and ring the ears. */
+  duck(duration = 3, depth = 0.22) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const g = this.master.gain;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(this.volume, t);
+    g.linearRampToValueAtTime(this.volume * depth, t + 0.06);
+    g.linearRampToValueAtTime(this.volume, t + duration);
+
+    const ring = this.ctx.createOscillator();
+    ring.type = 'sine';
+    ring.frequency.value = 3400;
+    const rg = this.ctx.createGain();
+    rg.gain.setValueAtTime(0, t);
+    rg.gain.linearRampToValueAtTime(0.07, t + 0.08);
+    rg.gain.exponentialRampToValueAtTime(0.0005, t + duration);
+    ring.connect(rg).connect(this.ctx.destination);
+    ring.start(t); ring.stop(t + duration + 0.1);
+  }
+
+  /** Incoming shell whistle. */
+  whistle(at, dur = 1.2) {
+    if (!this.ctx) return;
+    const bus = this._bus(at, 0.5, 200);
+    if (!bus) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(1500, t);
+    o.frequency.exponentialRampToValueAtTime(380, t + dur);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0008, t);
+    g.gain.exponentialRampToValueAtTime(0.5, t + dur * 0.85);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g).connect(bus.node);
+    o.start(t); o.stop(t + dur + 0.05);
+  }
+
+  /** Flashbang bang: very short, very loud, mostly high end. */
+  flashbang(at) {
+    if (!this.ctx) return;
+    const bus = this._bus(at, 0.9, 150);
+    if (!bus) return;
+    const t = this.ctx.currentTime;
+    const src = this._noiseSrc(1.6);
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = 900;
+    const env = this.ctx.createGain();
+    env.gain.setValueAtTime(1, t);
+    env.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    src.connect(hp).connect(env).connect(bus.node);
+    src.stop(t + 0.4);
+  }
+
+  /** Knife swing. */
+  swing(at) {
+    if (!this.ctx) return;
+    const bus = this._bus(at, 0.3, 24);
+    if (!bus) return;
+    const t = this.ctx.currentTime;
+    const src = this._noiseSrc(1.2);
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.Q.value = 1.6;
+    bp.frequency.setValueAtTime(700, t);
+    bp.frequency.exponentialRampToValueAtTime(2600, t + 0.16);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.5, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    src.connect(bp).connect(g).connect(bus.node);
+    src.stop(t + 0.2);
+  }
+
   /** Match-start / match-end siren of the test site. */
   siren(up = true) {
     if (!this.ctx) return;

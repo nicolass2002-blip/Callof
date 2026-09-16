@@ -213,3 +213,45 @@ label.sw:hover{color:#fff}
   animation:toastIn .16s ease-out, fade .4s 1.5s forwards}
 @keyframes toastIn{from{opacity:0;transform:translateY(8px)}}
 #eg-cheats{color:var(--b);font-size:10px;letter-spacing:.2em;margin:-8px 0 12px}
+
+/* ===================== streaks / tactical feedback ===================== */
+#blind{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+#streak-slot{position:absolute;right:28px;bottom:150px;text-align:right;
+  background:rgba(6,9,11,.62);border-right:3px solid var(--warn);padding:7px 12px;border-radius:3px}
+#streak-slot .sn{display:block;font-size:13px;letter-spacing:.16em;color:var(--warn);font-weight:800}
+#streak-slot .sh{display:block;font-size:10px;letter-spacing:.1em;color:var(--dim);margin-top:2px}
+#streak-slot .sq{position:absolute;left:-10px;top:-8px;min-width:18px;height:18px;border-radius:50%;
+  background:var(--warn);color:#14181a;font:800 11px/18px var(--ui);text-align:center}
+#uav-timer{position:absolute;left:26px;top:56px;font-size:11px;letter-spacing:.16em;color:var(--a);
+  background:rgba(6,9,11,.55);border-left:2px solid var(--a);padding:2px 8px}
+#gear #flashbangs b{color:var(--ink)}
+
+/* ========================== domination hud ========================== */
+#dom-bar{position:absolute;top:52px;left:50%;transform:translateX(-50%);display:flex;gap:10px}
+#dom-bar .zone{position:relative;width:52px;padding:3px 0 5px;text-align:center;
+  background:rgba(6,9,11,.6);border:1px solid var(--line);border-radius:4px}
+#dom-bar .zone b{display:block;font-size:15px;font-weight:800;letter-spacing:.1em;color:#cfd8de}
+#dom-bar .zone i{display:block;height:3px;margin:3px 5px 0;background:rgba(255,255,255,.14);border-radius:2px;
+  overflow:hidden;position:relative}
+#dom-bar .zone i::after{content:'';position:absolute;inset:0;width:var(--p,0%);background:#fff}
+#dom-bar .zone.own-a{border-color:var(--a);box-shadow:inset 0 -2px 0 var(--a)}
+#dom-bar .zone.own-a b{color:var(--a)}
+#dom-bar .zone.own-b{border-color:var(--b);box-shadow:inset 0 -2px 0 var(--b)}
+#dom-bar .zone.own-b b{color:var(--b)}
+#dom-bar .zone.contested{animation:blink .6s steps(2) infinite}
+#capture{position:absolute;left:50%;top:58%;transform:translateX(-50%);width:230px;text-align:center}
+#capture span{font-size:11px;letter-spacing:.24em;color:var(--warn)}
+#capture .cap-bar{height:4px;margin-top:5px;background:rgba(0,0,0,.6);border:1px solid var(--line);border-radius:2px;overflow:hidden}
+#capture .cap-bar i{display:block;height:100%;width:0;background:var(--warn);transition:width .1s linear}
+#capture.contested span{color:var(--b)}
+#capture.contested .cap-bar i{background:var(--b)}
+
+/* ======================= warmup / fps / endgame ======================= */
+#warmup{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);text-align:center;pointer-events:none}
+#warmup b{display:block;font-size:92px;font-weight:800;line-height:1;color:var(--warn);
+  text-shadow:0 6px 26px rgba(0,0,0,.7)}
+#warmup small{display:block;margin-top:6px;font-size:12px;letter-spacing:.34em;color:#dbe4ea}
+#fps{position:absolute;right:28px;top:16px;font-size:11px;letter-spacing:.1em;color:var(--dim);
+  background:rgba(6,9,11,.5);padding:2px 7px;border-radius:3px}
+#eg-mode{font-size:10px;letter-spacing:.24em;color:var(--dim);margin:-6px 0 10px}
+#eg-mvp{font-size:12px;letter-spacing:.12em;color:var(--warn);margin:0 0 14px}

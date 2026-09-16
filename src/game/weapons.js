@@ -304,6 +304,13 @@ export class ViewModel {
       const e = Math.sin(Math.min(1, (1 - p) * 3.1)) * Math.sin(Math.min(1, p * 3.1));
       oy -= 0.16 * e; oz += 0.06 * e; rx += 0.75 * e; rz += 0.45 * e;
     }
+    // knife swing: whip the weapon across the screen and back
+    if (s.meleeFrac > 0) {
+      const p = 1 - s.meleeFrac;                 // 0 -> 1 over the swing
+      const e = Math.sin(Math.min(1, p * 2.4) * Math.PI);
+      ox -= 0.16 * e; oy += 0.05 * e; oz -= 0.14 * e;
+      rz -= 1.15 * e; ry += 0.5 * e; rx -= 0.25 * e;
+    }
     // sprint: tilt the weapon across the body
     if (s.sprinting && s.moving && !s.ads) { rz += 0.42; ry += 0.22; ox += 0.04; oy -= 0.05; }
     // weapon swap

@@ -285,6 +285,27 @@ export class Effects {
     this.sfx?.explosion(point);
   }
 
+  /** Blinding pop: hard white light and a fast expanding puff. */
+  flash(point) {
+    this.flashLight.position.set(point.x, point.y + 0.3, point.z);
+    this.flashLight.color.setHex(0xffffff);
+    this.flashLight.intensity = 120;
+    this.flashLight.visible = true;
+    this.flashTime = 0.3;
+    for (let i = 0; i < 8; i++) {
+      const p = this.puffs.next();
+      p.m.visible = true;
+      p.m.material.map = this.puffTex;
+      p.m.material.opacity = 1;
+      p.m.position.set(point.x + rand(0.6, -0.6), point.y + rand(0.9, 0.1), point.z + rand(0.6, -0.6));
+      p.m.scale.setScalar(0.5);
+      p.life = p.max = 0.5;
+      p.grow = 2.6;
+      p.rise = 1.4;
+    }
+    this.sfx?.flashbang(point);
+  }
+
   update(dt) {
     this.time += dt;
     for (const t of this.tracers.items) {
@@ -319,7 +340,11 @@ export class Effects {
     if (this.flashTime > 0) {
       this.flashTime -= dt;
       this.flashLight.intensity = Math.max(0, this.flashLight.intensity - dt * 200);
-      if (this.flashTime <= 0) { this.flashLight.visible = false; this.flashLight.intensity = 0; }
+      if (this.flashTime <= 0) {
+        this.flashLight.visible = false;
+        this.flashLight.intensity = 0;
+        this.flashLight.color.setHex(0xffb060);
+      }
     }
     if (this.muzzleTime > 0) {
       this.muzzleTime -= dt;
@@ -349,19 +374,19 @@ export class Grenades {
     }, 14);
   }
 
-  throw_(origin, dir, owner, power = 1) {
+  throw_(origin, dir, owner, power = 1, type = 'frag') {
     const m = this.pool.next();
     m.visible = true;
     m.position.set(origin.x, origin.y, origin.z);
     const g = {
-      mesh: m, owner,
+      mesh: m, owner, type,
       p: { x: origin.x, y: origin.y, z: origin.z },
       v: {
         x: dir.x * GRENADE.throwSpeed * power,
         y: dir.y * GRENADE.throwSpeed * power + 3.2,
         z: dir.z * GRENADE.throwSpeed * power,
       },
-      fuse: GRENADE.fuse,
+      fuse: type === 'flash' ? 1.9 : GRENADE.fuse,
       spin: { x: rand(8, -8), y: rand(8, -8) },
     };
     this.items.push(g);
@@ -400,7 +425,8 @@ export class Grenades {
       g.mesh.rotation.y += g.spin.y * dt;
 
       if (g.fuse <= 0) {
-        this.effects.explosion(g.p);
+        if (g.type === 'flash') this.effects.flash(g.p);
+        else this.effects.explosion(g.p);
         onExplode?.(g);
         g.mesh.visible = false;
         this.items.splice(i, 1);

@@ -9,7 +9,7 @@ import { buildNuketown } from './world/nuketown.js';
 import { NavGraph } from './world/nav.js';
 import { Effects } from './game/combat.js';
 import { Player } from './game/player.js';
-import { Match, MATCH } from './game/match.js';
+import { Match, MATCH, MODES } from './game/match.js';
 import { WEAPONS, PRIMARIES } from './game/weapons.js';
 import { DIFFICULTY } from './game/bots.js';
 import { CHEATS, loadCheats, activeLabels, ACTIONS } from './game/cheats.js';
@@ -29,6 +29,8 @@ const settings = {
   quality: 2,
   primary: 'm4',
   difficulty: 'regular',
+  mode: 'tdm',
+  showFps: false,
 };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('nuketown.settings') || '{}')); } catch { /* defaults */ }
 const saveSettings = () => {
@@ -89,7 +91,7 @@ const input = new Input(canvas);
 const sfx = new Sfx();
 const hud = new Hud();
 
-let world, nav, effects, player, match, minimap, esp, admin;
+let world, nav, effects, player, match, minimap, esp, admin, wind;
 let state = 'loading';         // loading | menu | play | pause | end
 let lastTime = performance.now();
 let scoreboardShown = false;
@@ -195,7 +197,15 @@ function buildMenus() {
       [...diffs.children].forEach((x) => x.classList.toggle('sel', x === c));
     };
   });
-  $('brief-target').textContent = MATCH.scoreLimit;
+  const modes = $('mode-list');
+  const syncMode = () => {
+    [...modes.children].forEach((c) => c.classList.toggle('sel', c.dataset.mode === settings.mode));
+    $('brief-text').textContent = MODES[settings.mode].brief;
+  };
+  [...modes.children].forEach((c) => {
+    c.onclick = () => { settings.mode = c.dataset.mode; saveSettings(); syncMode(); };
+  });
+  syncMode();
 
   const bind = (id, key, fmt, apply) => {
     const el = $(id);
@@ -219,6 +229,13 @@ function buildMenus() {
     bind(`${p}-vol`, 'volume', (v) => String(Math.round(v * 100)), (v) => sfx.setVolume(v));
     if (p === 'set') bind('set-quality', 'quality', qualityName, () => applyQuality());
   }
+
+  const toggles = $('toggle-list');
+  [...toggles.children].forEach((c) => {
+    const k = c.dataset.toggle;
+    c.classList.toggle('sel', !!settings[k]);
+    c.onclick = () => { settings[k] = !settings[k]; saveSettings(); c.classList.toggle('sel', !!settings[k]); };
+  });
 
   $('btn-start').onclick = () => startMatch();
   $('btn-admin').onclick = () => admin.show();
@@ -259,7 +276,8 @@ function startMatch() {
 
   match = new Match({
     scene, collider: world.collider, nav, spawns: world.spawns, bounds: world.bounds,
-    sfx, effects, player, difficulty: settings.difficulty, onEvent: handleEvent,
+    sfx, effects, player, difficulty: settings.difficulty, mode: settings.mode,
+    onEvent: handleEvent,
   });
 
   $('menu').classList.add('hidden');
@@ -270,7 +288,9 @@ function startMatch() {
   hud.respawn(false);
   state = 'play';
   input.lock();
-  sfx.siren(true);
+  wind?.stop();
+  wind = sfx.startLoop('wind');
+  wind.setGain(0.16, 1.5);
   nukeState = null;
   flashEl.style.opacity = 0;
 }
@@ -292,6 +312,8 @@ function resume() {
 }
 
 function quitToMenu() {
+  wind?.stop();
+  wind = null;
   $('pause').classList.add('hidden');
   hud.show(false);
   hud.scoreboard(false);
@@ -312,10 +334,29 @@ function handleEvent(e) {
       sfx.hitmarker(e.killed);
       break;
     case 'streak':
-      hud.streak(e.n);
+      hud.streak(e.n, e.reward);
+      if (e.reward) sfx.click(1500, 0.22, 0.09);
       break;
+    case 'streakUsed':
+      hud.banner(e.name, 'EN APPROCHE');
+      if (e.id === 'uav') sfx.siren(true);
+      break;
+    case 'streakEmpty':
+      toast('AUCUNE SÉRIE DISPONIBLE');
+      break;
+    case 'zone': {
+      const mine = e.team === player.team;
+      hud.banner(`ZONE ${e.zone} ${mine ? 'CAPTURÉE' : 'PERDUE'}`,
+        mine ? (e.byPlayer ? 'BEAU TRAVAIL' : 'ALLIÉS') : 'REPRENEZ-LA');
+      sfx.hitmarker(mine);
+      break;
+    }
     case 'spawned':
       hud.respawn(false);
+      break;
+    case 'go':
+      hud.banner('COMBATTEZ', MODES[settings.mode].short === 'DOM' ? 'PRENEZ LES DRAPEAUX' : 'ÉLIMINEZ L\'ENNEMI');
+      sfx.siren(true);
       break;
     case 'end':
       endMatch(e);
@@ -351,6 +392,8 @@ function detonate() {
 
 function endMatch(e) {
   state = 'end';
+  wind?.stop();
+  wind = null;
   input.unlock();
   hud.show(false);
   hud.scoreboard(false);
@@ -365,6 +408,9 @@ function endMatch(e) {
   $('eg-acc').textContent = `${acc.toFixed(1)}%`;
   $('eg-streak').textContent = player.bestStreak;
   $('eg-cheats').classList.toggle('hidden', !CHEATS.used);
+  $('eg-mode').textContent = `${match.rules.name} · NUKETOWN`;
+  const mvp = match.mvp();
+  $('eg-mvp').textContent = mvp ? `MVP : ${mvp.name} — ${mvp.kills} / ${mvp.deaths}` : '';
   setTimeout(() => {
     if (state === 'end') $('endgame').classList.remove('hidden');
   }, 3200);
@@ -399,6 +445,7 @@ function paintClock(secs) {
   c.texture.needsUpdate = true;
 }
 
+let fpsFrames = 0, fpsAt = 0;
 let cheatStatusKey = '';
 function paintCheatStatus() {
   const labels = activeLabels();
@@ -434,7 +481,17 @@ function frame(now) {
     const st = player.weapon;
     hud.health(player.health);
     hud.ammo(st.mag, st.reserve, st.w.mag);
-    hud.weapon(st.w.name, st.reloading > 0 ? 'RECHARGE' : st.mode, player.grenades);
+    hud.weapon(st.w.name, st.reloading > 0 ? 'RECHARGE' : st.mode, player.grenades, player.flashbangs);
+    hud.blind(player.blindT / player.blindMax);
+    hud.streakSlot(match.streaks.next, match.streaks.queue.length);
+    hud.uavTimer(match.streaks.uavActive ? match.streaks.uavUntil - match.time : 0);
+    hud.domination(match.dom ? match.dom.hudState() : null, match.dom?.playerZone());
+    hud.warmupCount(match.warmup);
+    fpsFrames++;
+    if (now - fpsAt > 500) {
+      hud.fps(settings.showFps ? Math.round((fpsFrames * 1000) / (now - fpsAt)) : null);
+      fpsAt = now; fpsFrames = 0;
+    }
     hud.reloadHint(st.mag === 0 && st.reserve > 0);
     hud.scores(match.score.A, match.score.B);
     hud.clock(match.clock);
@@ -460,6 +517,7 @@ function frame(now) {
     if (input.hit('Escape')) pause();
   } else if (state === 'end' && nukeState) {
     esp?.clear();
+    hud.blind(0);
     nukeState.t += dt;
     const t = nukeState.t;
     nukeState.g.scale.setScalar(clamp(0.05 + t * 0.5, 0.05, 1.15));

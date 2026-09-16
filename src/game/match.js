@@ -5,11 +5,21 @@ import { hitscan, damageAt, Grenades } from './combat.js';
 import { Bot, DIFFICULTY } from './bots.js';
 import { WEAPONS, PRIMARIES } from './weapons.js';
 import { CHEATS } from './cheats.js';
+import { Streaks } from './streaks.js';
+import { Domination, DOM } from './domination.js';
 
 export const MATCH = { scoreLimit: 75, duration: 600, teamSize: 6 };
 
+export const MODES = {
+  tdm: { id: 'tdm', name: 'MATCH À MORT PAR ÉQUIPE', short: 'TDM', scoreLimit: MATCH.scoreLimit, duration: MATCH.duration,
+    brief: 'Premier camp à 75 éliminations, ou meilleur score après 10 minutes.' },
+  dom: { id: 'dom', name: 'DOMINATION', short: 'DOM', scoreLimit: DOM.scoreLimit, duration: DOM.duration,
+    brief: 'Trois drapeaux : A au pavillon jaune, B au milieu de la rue, C au pavillon vert. '
+      + 'Chaque drapeau tenu rapporte des points toutes les 5 secondes. Objectif : 200 points.' },
+};
+
 export class Match {
-  constructor({ scene, collider, nav, spawns, bounds, sfx, effects, player, difficulty, onEvent }) {
+  constructor({ scene, collider, nav, spawns, bounds, sfx, effects, player, difficulty, onEvent, mode }) {
     this.scene = scene;
     this.collider = collider;
     this.nav = nav;
@@ -21,9 +31,13 @@ export class Match {
     this.onEvent = onEvent || (() => {});
     this.difficulty = difficulty;
     this.grenadeSys = new Grenades(scene, collider, effects);
+    this.streaks = new Streaks(scene, this);
 
+    this.mode = MODES[mode] ? mode : 'tdm';
+    this.rules = MODES[this.mode];
     this.time = 0;
-    this.clock = MATCH.duration;
+    this.warmup = 3.0;                 // "prepare for battle" freeze
+    this.clock = this.rules.duration;
     this.score = { A: 0, B: 0 };
     this.over = false;
     this.bots = [];
@@ -50,6 +64,8 @@ export class Match {
 
     this.spawnActor(this.player, true);
     for (const b of this.bots) this.spawnActor(b, true);
+
+    this.dom = this.mode === 'dom' ? new Domination(this, scene) : null;
   }
 
   /* ------------------------------- spawning ------------------------------ */
@@ -93,7 +109,7 @@ export class Match {
   /* -------------------------------- damage ------------------------------- */
 
   /** @returns true when the hit killed the target. */
-  damage(target, dmg, attacker, zone = 'chest') {
+  damage(target, dmg, attacker, zone = 'chest', srcName = null) {
     if (!target.alive || this.over) return false;
     if (target.isPlayer) {
       target.hurt(dmg, attacker ? attacker.pos : null, this);
@@ -108,28 +124,30 @@ export class Match {
       }
     }
     if (target.health <= 0) {
-      this.kill(target, attacker, zone);
+      this.kill(target, attacker, zone, srcName);
       return true;
     }
     return false;
   }
 
-  kill(victim, attacker, zone) {
+  kill(victim, attacker, zone, srcName = null) {
     victim.die();
     if (victim.isPlayer) victim.killerRef = attacker;
     const w = attacker ? (attacker.isPlayer ? attacker.weapon.w : attacker.weapon.w) : null;
 
     if (attacker && attacker.team !== victim.team) {
       attacker.kills++;
-      this.score[attacker.team]++;
+      if (this.mode === 'tdm') this.score[attacker.team]++;
       if (attacker.isPlayer) {
         attacker.streak++;
         attacker.bestStreak = Math.max(attacker.bestStreak, attacker.streak);
-        if ([3, 5, 7, 10, 15].includes(attacker.streak)) {
+        const reward = this.streaks.onKill(attacker.streak);
+        if (reward) this.onEvent({ type: 'streak', n: attacker.streak, reward });
+        else if ([4, 6, 8, 9, 11, 13].includes(attacker.streak)) {
           this.onEvent({ type: 'streak', n: attacker.streak });
         }
-      } else if (attacker.streakCount !== undefined) attacker.streakCount++;
-    } else if (attacker === victim || !attacker) {
+      }
+    } else if ((attacker === victim || !attacker) && this.mode === 'tdm') {
       this.score[victim.team === 'A' ? 'B' : 'A']++;
     }
 
@@ -139,7 +157,7 @@ export class Match {
       killerTeam: attacker ? attacker.team : null,
       victim: victim.name,
       victimTeam: victim.team,
-      weapon: w ? w.name : 'EXPLOSION',
+      weapon: srcName || (w ? w.name : 'EXPLOSION'),
       headshot: zone === 'head',
       mine: attacker === this.player,
       victimIsMe: victim === this.player,
@@ -147,7 +165,7 @@ export class Match {
 
     this.respawns.push({ actor: victim, at: this.time + (victim.isPlayer ? 3.0 : rand(6.5, 3.5)) });
 
-    if (this.score.A >= MATCH.scoreLimit || this.score.B >= MATCH.scoreLimit) this.finish();
+    if (this.score.A >= this.rules.scoreLimit || this.score.B >= this.rules.scoreLimit) this.finish();
   }
 
   /* ------------------------------ bot hooks ----------------------------- */
@@ -213,8 +231,37 @@ export class Match {
     );
   }
 
-  throwGrenade(origin, dir, owner, power = 1) {
-    this.grenadeSys.throw_(origin, dir, owner, power);
+  throwGrenade(origin, dir, owner, power = 1, type = 'frag') {
+    this.grenadeSys.throw_(origin, dir, owner, power, type);
+  }
+
+  /** Blind everyone who was looking at the pop. */
+  applyFlash(point) {
+    for (const a of this.actors) {
+      if (!a.alive) continue;
+      const eye = { x: a.pos.x, y: a.pos.y + a.height * 0.9, z: a.pos.z };
+      const dx = point.x - eye.x, dy = point.y - eye.y, dz = point.z - eye.z;
+      const dist = Math.hypot(dx, dy, dz);
+      if (dist > 22) continue;
+      if (!this.collider.los(eye.x, eye.y, eye.z, point.x, point.y, point.z)) continue;
+      const yaw = a.yaw;
+      const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+      const dot = (dx * fx + dz * fz) / (Math.hypot(dx, dz) || 1);
+      const facing = clamp((dot + 0.35) / 1.35, 0, 1);           // 1 = staring at it
+      const near = clamp(1 - dist / 22, 0, 1);
+      const secs = (0.5 + 4.2 * facing) * (0.35 + 0.65 * near);
+      if (secs < 0.35) continue;
+      if (a.isPlayer) a.flashBlind(secs);
+      else a.blindT = Math.max(a.blindT, secs * 1.15);
+    }
+  }
+
+  /** Spend the next earned killstreak. */
+  useStreak(player) {
+    const S = this.streaks.use(player);
+    if (S) this.onEvent({ type: 'streakUsed', name: S.name, id: S.id });
+    else this.onEvent({ type: 'streakEmpty' });
+    return S;
   }
 
   /** Register a noise so nearby bots can react, and light up the minimap. */
@@ -234,16 +281,28 @@ export class Match {
   update(dt) {
     if (this.over) return;
     this.time += dt;
-    this.clock = Math.max(0, this.clock - dt);
+    if (this.warmup > 0) {
+      this.warmup -= dt;
+      if (this.warmup <= 0) this.onEvent({ type: 'go' });
+    } else {
+      this.clock = Math.max(0, this.clock - dt);
+    }
 
     if (!(CHEATS.enabled && CHEATS.freezeBots)) {
       for (const b of this.bots) b.update(dt, this);
     }
+    if (this.warmup > 0) return;
     if (this.player.alive && this.player.pos.y < -3) this.rescue(this.player);
+    this.streaks.update(dt);
+    this.dom?.update(dt);
 
     this.grenadeSys.update(dt, (g) => {
+      if (g.type === 'flash') {
+        this.applyFlash(g.p);
+        return;
+      }
       const victims = Grenades.blastDamage(this.collider, this.actors, g.p);
-      for (const v of victims) this.damage(v.actor, v.dmg, g.owner, 'chest');
+      for (const v of victims) this.damage(v.actor, v.dmg, g.owner, 'chest', 'GRENADE');
       const d = Math.hypot(g.p.x - this.player.pos.x, g.p.z - this.player.pos.z);
       if (d < 16) this.player.shake(0.5, clamp(0.12 * (1 - d / 16), 0, 0.12));
     });
@@ -270,10 +329,17 @@ export class Match {
   finish() {
     if (this.over) return;
     this.over = true;
+    this.streaks.dispose();
+    this.dom?.dispose();
     const a = this.score.A, b = this.score.B;
     const mine = this.player.team;
     const result = a === b ? 'draw' : (mine === 'A') === (a > b) ? 'win' : 'loss';
     this.onEvent({ type: 'end', result, score: { ...this.score } });
+  }
+
+  /** Best performer of the match, across both teams. */
+  mvp() {
+    return [...this.actors].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths)[0];
   }
 
   roster(team) {
@@ -288,6 +354,7 @@ export class Match {
     for (const a of this.actors) {
       if (!a.alive || a === this.player) continue;
       if (a.team === this.player.team) out.push({ a, known: true });
+      else if (this.streaks.uavActive) out.push({ a, known: false });
       else if (CHEATS.enabled && CHEATS.esp.radar) out.push({ a, known: false });
       else {
         const t = this.recentFire.get(a);

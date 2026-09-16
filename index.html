@@ -35,17 +35,29 @@
     <div id="weapon-name">M4A1</div>
     <div id="gear">
       <span id="grenades">✦ <b>2</b></span>
+      <span id="flashbangs">◎ <b>1</b></span>
       <span id="firemode">AUTO</span>
     </div>
     <div id="reload-hint" class="hidden">RECHARGER [R]</div>
   </div>
 
+  <div id="dom-bar" class="hidden">
+    <div class="zone" data-z="A"><b>A</b><i></i></div>
+    <div class="zone" data-z="B"><b>B</b><i></i></div>
+    <div class="zone" data-z="C"><b>C</b><i></i></div>
+  </div>
+  <div id="capture" class="hidden"><span id="capture-txt">CAPTURE</span><div class="cap-bar"><i></i></div></div>
   <div id="hud-top">
     <div class="team-score t-a"><span class="tag">ALLIÉS</span><span id="score-a">0</span></div>
     <div id="clock">10:00</div>
     <div class="team-score t-b"><span id="score-b">0</span><span class="tag">AXIS</span></div>
   </div>
 
+  <div id="blind"></div>
+  <div id="warmup" class="hidden"><b>3</b><small>PRÉPAREZ-VOUS</small></div>
+  <div id="fps" class="hidden">-- FPS</div>
+  <div id="streak-slot" class="hidden"></div>
+  <div id="uav-timer" class="hidden"></div>
   <div id="cheat-status"></div>
   <div id="killfeed"></div>
   <div id="streak-banner"></div>
@@ -80,6 +92,11 @@
 
     <div class="panel">
       <div class="panel-col">
+        <h3>Mode de jeu</h3>
+        <div id="mode-list" class="chips">
+          <button class="chip sel" data-mode="tdm">Match à mort par équipe<small>75 éliminations · 10 min</small></button>
+          <button class="chip" data-mode="dom">Domination<small>3 drapeaux · 200 points</small></button>
+        </div>
         <h3>Équipement</h3>
         <div id="loadout-list" class="chips"></div>
         <h3>Difficulté des bots</h3>
@@ -94,6 +111,7 @@
         <label class="slider">Champ de vision <input id="set-fov" type="range" min="65" max="110" value="85" /><output>85</output></label>
         <label class="slider">Volume <input id="set-vol" type="range" min="0" max="100" value="70" /><output>70</output></label>
         <label class="slider">Qualité <input id="set-quality" type="range" min="0" max="2" step="1" value="2" /><output>Élevée</output></label>
+        <div id="toggle-list" class="chips"><button class="chip" data-toggle="showFps">Compteur d'images</button></div>
       </div>
       <div class="panel-col">
         <h3>Commandes</h3>
@@ -107,15 +125,19 @@
           <li><kbd>Espace</kbd><span>Sauter</span></li>
           <li><kbd>R</kbd><span>Recharger</span></li>
           <li><kbd>1</kbd> <kbd>2</kbd> / <kbd>Molette</kbd><span>Changer d'arme</span></li>
-          <li><kbd>G</kbd><span>Grenade</span></li>
+          <li><kbd>G</kbd><span>Grenade à fragmentation</span></li>
+          <li><kbd>F</kbd><span>Grenade aveuglante</span></li>
+          <li><kbd>V</kbd><span>Couteau</span></li>
+          <li><kbd>4</kbd><span>Série d'éliminations</span></li>
           <li><kbd>B</kbd><span>Mode de tir</span></li>
           <li><kbd>Tab</kbd><span>Scores</span></li>
           <li><kbd>Échap</kbd><span>Pause</span></li>
         </ul>
         <div class="brief">
           <h3>Objectif</h3>
-          <p>Premier camp à <b id="brief-target">75</b> éliminations, ou score le plus élevé après <b>10 minutes</b>.
-          Deux pavillons, une rue, aucun endroit sûr.</p>
+          <p id="brief-text">Premier camp à 75 éliminations, ou meilleur score après 10 minutes.</p>
+          <p><b>Séries :</b> 3 éliminations → avion espion · 5 → frappe mortier ·
+          7 → hélicoptère. Déclenchement avec <kbd>4</kbd>.</p>
         </div>
       </div>
     </div>
@@ -143,6 +165,8 @@
     <h2 id="eg-result">VICTOIRE</h2>
     <div id="eg-cheats" class="hidden">STATISTIQUES NON CLASSÉES · MOD ADMIN UTILISÉ</div>
     <div id="eg-score">75 — 43</div>
+    <div id="eg-mode"></div>
+    <div id="eg-mvp"></div>
     <table class="eg-stats">
       <tr><th>Éliminations</th><td id="eg-k">0</td></tr>
       <tr><th>Morts</th><td id="eg-d">0</td></tr>

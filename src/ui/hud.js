@@ -10,6 +10,12 @@ export class Hud {
       health: $('health-bar'), healthFill: $('health-bar').firstElementChild, healthTxt: $('health-txt'),
       ammo: $('ammo'), mag: $('ammo-mag'), res: $('ammo-res'),
       weapon: $('weapon-name'), firemode: $('firemode'), grenades: $('grenades').querySelector('b'),
+      flashbangs: $('flashbangs').querySelector('b'),
+      blind: $('blind'), streakSlot: $('streak-slot'), uav: $('uav-timer'),
+      warmup: $('warmup'), warmupNum: $('warmup').querySelector('b'), fps: $('fps'),
+      domBar: $('dom-bar'), capture: $('capture'), captureTxt: $('capture-txt'),
+      captureBar: $('capture').querySelector('.cap-bar i'),
+      zones: Object.fromEntries([...$('dom-bar').querySelectorAll('.zone')].map((z) => [z.dataset.z, z])),
       reload: $('reload-hint'),
       scoreA: $('score-a'), scoreB: $('score-b'), clock: $('clock'),
       killfeed: $('killfeed'), streak: $('streak-banner'),
@@ -43,10 +49,37 @@ export class Hud {
     this.el.ammo.classList.toggle('low', mag <= Math.max(1, Math.ceil(magSize * 0.25)));
   }
 
-  weapon(name, mode, grenades) {
+  weapon(name, mode, grenades, flashbangs) {
     this.el.weapon.textContent = name;
     this.el.firemode.textContent = (mode || '').toUpperCase();
     this.el.grenades.textContent = grenades;
+    this.el.flashbangs.textContent = flashbangs;
+  }
+
+  /** White-out while flashbanged (0..1). */
+  blind(v) {
+    const o = v <= 0 ? 0 : Math.min(1, v ** 0.55);
+    if (this._blind === o) return;
+    this._blind = o;
+    this.el.blind.style.opacity = String(o * 0.96);
+  }
+
+  /** The killstreak waiting to be called in. */
+  streakSlot(streak, count) {
+    const key = streak ? `${streak.id}|${count}` : '';
+    if (key === this._slotKey) return;
+    this._slotKey = key;
+    this.el.streakSlot.classList.toggle('hidden', !streak);
+    if (!streak) return;
+    this.el.streakSlot.innerHTML =
+      `${count > 1 ? `<span class="sq">${count}</span>` : ''}` +
+      `<span class="sn">${streak.name}</span><span class="sh">[4] ${streak.hint}</span>`;
+  }
+
+  uavTimer(secs) {
+    const on = secs > 0;
+    this.el.uav.classList.toggle('hidden', !on);
+    if (on) this.el.uav.textContent = `AVION ESPION ${Math.ceil(secs)}s`;
   }
 
   reloadHint(v) { this.el.reload.classList.toggle('hidden', !v); }
@@ -84,9 +117,16 @@ export class Hud {
     while (this.el.killfeed.children.length > 6) this.el.killfeed.firstElementChild.remove();
   }
 
-  streak(n) {
-    const labels = { 3: 'AVION ESPION', 5: 'FRAPPE AÉRIENNE', 7: 'HÉLICOPTÈRE', 10: 'DÉCHAÎNÉ', 15: 'INARRÊTABLE' };
-    this.el.streak.innerHTML = `SÉRIE DE ${n}<small>${labels[n] || 'CONTINUEZ'}</small>`;
+  streak(n, reward) {
+    this.el.streak.innerHTML = reward
+      ? `${reward.name}<small>SÉRIE DE ${n} · PRÊT SUR [4]</small>`
+      : `SÉRIE DE ${n}<small>CONTINUEZ</small>`;
+    this.el.streak.classList.add('on');
+    this.streakTimer = reward ? 2.8 : 1.8;
+  }
+
+  banner(title, sub = '') {
+    this.el.streak.innerHTML = `${title}<small>${sub}</small>`;
     this.el.streak.classList.add('on');
     this.streakTimer = 2.2;
   }
@@ -117,6 +157,7 @@ export class Hud {
   scoreboard(show, match, player) {
     this.el.scoreboard.classList.toggle('hidden', !show);
     if (!show) return;
+    this.el.scoreboard.querySelector('h2').textContent = `NUKETOWN — ${match.rules.name}`;
     this.el.sbScoreA.textContent = match.score.A;
     this.el.sbScoreB.textContent = match.score.B;
     for (const [team, tbody] of [['A', this.el.sbA], ['B', this.el.sbB]]) {
@@ -129,6 +170,43 @@ export class Hud {
         tbody.appendChild(tr);
       }
     }
+  }
+
+  /** @param {Array|null} zones from Domination.hudState() */
+  domination(zones, playerZone) {
+    this.el.domBar.classList.toggle('hidden', !zones);
+    if (!zones) { this.el.capture.classList.add('hidden'); return; }
+    for (const z of zones) {
+      const el = this.el.zones[z.id];
+      if (!el) continue;
+      el.classList.toggle('own-a', z.owner === 'A');
+      el.classList.toggle('own-b', z.owner === 'B');
+      el.classList.toggle('contested', z.contested);
+      el.querySelector('i').style.setProperty('--p', `${Math.round((z.owner ? 1 : z.progress) * 100)}%`);
+    }
+    const on = !!playerZone && (playerZone.contested || playerZone.capturing || playerZone.progress > 0.01);
+    this.el.capture.classList.toggle('hidden', !on);
+    if (!on) return;
+    this.el.capture.classList.toggle('contested', playerZone.contested);
+    this.el.captureTxt.textContent = playerZone.contested
+      ? `ZONE ${playerZone.id} CONTESTÉE`
+      : playerZone.owner === playerZone.capturing
+        ? `ZONE ${playerZone.id} TENUE`
+        : `CAPTURE DE ${playerZone.id}`;
+    this.el.captureBar.style.width = `${Math.round((playerZone.owner === playerZone.capturing ? 1 : playerZone.progress) * 100)}%`;
+  }
+
+  warmupCount(secs) {
+    const on = secs > 0;
+    this.el.warmup.classList.toggle('hidden', !on);
+    if (!on) return;
+    const n = Math.max(1, Math.min(3, Math.ceil(secs - 0.02)));
+    if (n !== this._warmN) { this._warmN = n; this.el.warmupNum.textContent = n; }
+  }
+
+  fps(v) {
+    this.el.fps.classList.toggle('hidden', v === null);
+    if (v !== null) this.el.fps.textContent = `${v} FPS`;
   }
 
   update(dt) {

@@ -6,9 +6,15 @@ deux pavillons en symétrie centrale, une rue à deux voies entre eux, garages,
 jardins clôturés, le bus scolaire jaune, le pick-up, les mannequins, le
 panneau « WELCOME TO NUKETOWN » et l'horloge de décompte du site.
 
-Match à mort par équipe 6 contre 6 (vous + 5 alliés contre 6 adversaires),
-premier camp à 75 éliminations ou meilleur score après 10 minutes. À la fin du
-match, la bombe part.
+Deux modes 6 contre 6 contre des bots (vous + 5 alliés face à 6 adversaires) :
+
+- **Match à mort par équipe** — 75 éliminations ou meilleur score après 10 min.
+- **Domination** — trois drapeaux (A au pavillon jaune, B au milieu de la rue,
+  C au pavillon vert), 200 points, 12 min. Les éliminations ne rapportent
+  rien : seuls les drapeaux tenus font monter le score, toutes les 5 secondes.
+
+Décompte d'avant-match, séries d'éliminations, corps-à-corps, grenades
+aveuglantes… et à la fin du match, la bombe part.
 
 Aucun asset externe : géométrie, textures, sons et animations sont tous
 générés par le code. La seule dépendance, three.js, est livrée dans `vendor/`,
@@ -42,7 +48,10 @@ le jeu en pause.
 | `Espace` | Sauter |
 | `R` | Recharger |
 | `1` / `2` / molette | Arme principale / arme de poing |
-| `G` | Grenade |
+| `G` | Grenade à fragmentation |
+| `F` | Grenade aveuglante |
+| `V` | Couteau (mortel au contact) |
+| `4` | Déclencher la série d'éliminations |
 | `B` | Mode de tir (auto / rafale) |
 | `Tab` | Tableau des scores |
 | `Échap` | Pause |
@@ -64,7 +73,26 @@ Réglages dans le menu : sensibilité, champ de vision, volume, qualité
 
 Dégâts dégressifs avec la distance, multiplicateur à la tête, régénération de
 santé après 4 s sans encaisser, grenades à fragmentation avec rebonds et
-dégâts de zone occultés par les murs.
+dégâts de zone occultés par les murs, et couteau (`V`) mortel à bout portant —
+les bots s'en servent aussi si vous les laissez approcher.
+
+La grenade aveuglante (`F`) éblouit qui la regarde : écran blanc et son étouffé
+pour vous, perte totale de vision pour les bots pendant quelques secondes
+(ils cessent de tirer et perdent leur cible).
+
+## Séries d'éliminations
+
+Gagnées sur des éliminations consécutives, mises en file (3 maximum) et
+déclenchées avec <kbd>4</kbd> :
+
+| Série | Récompense | Effet |
+| --- | --- | --- |
+| 3 | **Avion espion** | Tous les ennemis apparaissent sur la mini-carte pendant 30 s |
+| 5 | **Frappe mortier** | 9 obus tombent là où vous visiez, avec le sifflement d'arrivée |
+| 7 | **Hélicoptère** | Un hélico patrouille 34 s, acquiert ses cibles et les mitraille |
+
+À 12, 15 et 20 éliminations, l'échelle recommence. Les bots n'en gagnent pas :
+c'est votre avantage, à vous d'en profiter.
 
 ## Mod admin (triches)
 
@@ -133,6 +161,8 @@ src/
     nav.js             graphe de navigation échantillonné + plus courts chemins
   game/
     cheats.js          mod admin : état, aimbot, actions ponctuelles
+    domination.js      mode Domination : drapeaux, capture, score, objectifs des bots
+    streaks.js         avion espion, frappe mortier, hélicoptère de combat
     weapons.js         données d'armes, munitions, view model, recul caméra
     combat.js          hitscan, zones de dégâts, effets, grenades
     player.js          déplacement, caméra, tir, santé du joueur
