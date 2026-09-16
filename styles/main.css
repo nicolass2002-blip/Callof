@@ -152,3 +152,64 @@ h3{letter-spacing:.18em;font-size:11px;color:var(--warn);text-transform:uppercas
 #scoreboard tr.me td{color:var(--warn);font-weight:700}
 #scoreboard tr.dead td{opacity:.42}
 .sb-foot{text-align:center;color:var(--dim);font-size:10px;letter-spacing:.2em;margin-top:14px}
+
+/* ============================ ADMIN MOD ============================ */
+#admin{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;
+  background:rgba(4,6,8,.55);backdrop-filter:blur(3px)}
+.admin-box{width:min(1120px,95vw);max-height:92vh;display:flex;flex-direction:column;
+  background:rgba(9,12,15,.97);border:1px solid rgba(255,203,61,.34);border-radius:10px;
+  box-shadow:0 30px 90px rgba(0,0,0,.6)}
+.admin-box header{display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--line)}
+.admin-box header h2{font-size:16px;letter-spacing:.26em;color:var(--warn);margin:0}
+.admin-box header .master{margin-left:auto}
+.admin-box header button{cursor:pointer;background:transparent;border:1px solid var(--line);color:var(--ink);
+  border-radius:5px;padding:7px 12px;font:600 11px/1 var(--ui);letter-spacing:.14em}
+.admin-box header button:hover{border-color:var(--b);color:var(--b)}
+.admin-box footer{display:flex;gap:16px;justify-content:space-between;align-items:center;
+  padding:11px 20px;border-top:1px solid var(--line);color:var(--dim);font-size:10px;letter-spacing:.1em}
+#admin-state{color:var(--warn);letter-spacing:.12em;text-align:right}
+.admin-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(248px,1fr));gap:4px 26px;
+  padding:16px 20px;overflow:auto}
+.admin-grid section{padding:4px 0 10px}
+.admin-grid h3{margin:6px 0 10px}
+#admin.off .admin-grid{opacity:.38;pointer-events:none}
+.admin-row{padding:2px 0}
+.admin-row small{display:block;color:var(--dim);font-size:10px;letter-spacing:.04em;margin:-1px 0 4px 40px}
+label.sw{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:12px;letter-spacing:.06em;
+  padding:5px 0;color:#dbe4ea}
+label.sw input{display:none}
+label.sw>span{position:relative;flex:0 0 30px;height:16px;border-radius:9px;background:rgba(255,255,255,.1);
+  border:1px solid var(--line);transition:.16s}
+label.sw>span::after{content:'';position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;
+  background:#8e989f;transition:.16s}
+label.sw input:checked+span{background:rgba(255,203,61,.3);border-color:var(--warn)}
+label.sw input:checked+span::after{left:16px;background:var(--warn)}
+label.sw kbd{margin-left:auto;opacity:.7}
+label.sw:hover{color:#fff}
+.admin-range{display:grid;grid-template-columns:1fr auto;grid-template-areas:"lab out" "inp inp";
+  gap:3px 10px;align-items:center;font-size:12px;color:#dbe4ea;padding:7px 0}
+.admin-range span{grid-area:lab;letter-spacing:.06em}
+.admin-range input{grid-area:inp;width:100%;min-width:0;accent-color:var(--warn);height:3px}
+.admin-range output{grid-area:out;text-align:right;color:var(--warn);font-variant-numeric:tabular-nums;font-size:11px}
+.admin-choice{display:flex;align-items:center;gap:10px;font-size:12px;color:#dbe4ea;padding:6px 0}
+.admin-choice span{flex:1 1 auto;letter-spacing:.06em}
+.admin-choice div{display:flex;gap:6px}
+.admin-choice button{cursor:pointer;background:rgba(255,255,255,.05);border:1px solid var(--line);
+  color:var(--ink);border-radius:4px;padding:5px 10px;font:600 10px/1 var(--ui);letter-spacing:.1em}
+.admin-choice button.sel{background:rgba(255,203,61,.2);border-color:var(--warn)}
+.admin-act{display:block;width:100%;cursor:pointer;text-align:left;margin:3px 0;
+  background:rgba(255,255,255,.04);border:1px solid var(--line);color:var(--ink);border-radius:5px;
+  padding:8px 11px;font:600 11px/1 var(--ui);letter-spacing:.1em;transition:.14s}
+.admin-act:hover{background:rgba(255,83,64,.16);border-color:rgba(255,83,64,.55)}
+.cta small{display:block;font-size:9px;letter-spacing:.2em;opacity:.65;margin-top:3px}
+
+#cheat-status{position:absolute;left:26px;top:74px;display:flex;flex-direction:column;gap:3px;
+  font-size:10px;letter-spacing:.16em;color:var(--warn);text-shadow:0 2px 5px #000}
+#cheat-status i{font-style:normal;opacity:.9;background:rgba(0,0,0,.35);padding:1px 6px;border-left:2px solid var(--warn)}
+#toast{position:fixed;left:50%;bottom:10%;transform:translateX(-50%);z-index:75;pointer-events:none;
+  display:flex;flex-direction:column;gap:6px;align-items:center}
+#toast div{background:rgba(8,11,14,.86);border:1px solid rgba(255,203,61,.4);color:var(--warn);
+  padding:5px 13px;border-radius:4px;font:700 10px/1 var(--ui);letter-spacing:.18em;
+  animation:toastIn .16s ease-out, fade .4s 1.5s forwards}
+@keyframes toastIn{from{opacity:0;transform:translateY(8px)}}
+#eg-cheats{color:var(--b);font-size:10px;letter-spacing:.2em;margin:-8px 0 12px}

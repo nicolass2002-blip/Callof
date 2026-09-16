@@ -46,6 +46,7 @@
     <div class="team-score t-b"><span id="score-b">0</span><span class="tag">AXIS</span></div>
   </div>
 
+  <div id="cheat-status"></div>
   <div id="killfeed"></div>
   <div id="streak-banner"></div>
   <div id="respawn-overlay" class="hidden">
@@ -120,6 +121,7 @@
     </div>
 
     <button id="btn-start" class="cta">DÉPLOIEMENT</button>
+    <button id="btn-admin" class="cta ghost">MOD ADMIN <small>F1</small></button>
     <p class="hint">La souris est capturée au lancement · <kbd>Échap</kbd> pour la libérer</p>
   </div>
 </div>
@@ -131,6 +133,7 @@
     <label class="slider">Champ de vision <input id="p-fov" type="range" min="65" max="110" value="85" /><output>85</output></label>
     <label class="slider">Volume <input id="p-vol" type="range" min="0" max="100" value="70" /><output>70</output></label>
     <button id="btn-resume" class="cta">REPRENDRE</button>
+    <button id="p-admin" class="cta ghost">MOD ADMIN</button>
     <button id="btn-quit" class="cta ghost">QUITTER LE MATCH</button>
   </div>
 </div>
@@ -138,6 +141,7 @@
 <div id="endgame" class="screen hidden">
   <div class="menu-inner narrow">
     <h2 id="eg-result">VICTOIRE</h2>
+    <div id="eg-cheats" class="hidden">STATISTIQUES NON CLASSÉES · MOD ADMIN UTILISÉ</div>
     <div id="eg-score">75 — 43</div>
     <table class="eg-stats">
       <tr><th>Éliminations</th><td id="eg-k">0</td></tr>
@@ -157,6 +161,8 @@
     <p id="loading-txt">Initialisation du site d'essais…</p>
   </div>
 </div>
+
+<div id="toast"></div>
 
 <script type="module" src="src/main.js"></script>
 </body>

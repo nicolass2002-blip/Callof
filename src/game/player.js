@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { clamp, smooth, gauss } from '../core/util.js';
 import { WeaponState, WEAPONS, ViewModel, Recoil } from './weapons.js';
 import { hitscan, damageAt } from './combat.js';
+import { CHEATS, aimbotStep } from './cheats.js';
 
 const WALK = 4.6, SPRINT = 6.8, CROUCH_SPEED = 2.3, ADS_SPEED = 3.1;
 const ACCEL = 13, AIR_ACCEL = 2.2, FRICTION = 11, GRAVITY = 21, JUMP = 7.0;
@@ -99,6 +100,7 @@ export class Player {
 
   hurt(dmg, from, W) {
     if (!this.alive) return;
+    if (CHEATS.enabled && CHEATS.god) return;         // admin: invincible
     this.health -= dmg;
     this.lastDamage = W.time;
     this.sfx.pain();
@@ -133,7 +135,10 @@ export class Player {
     this.sprinting = false;
 
     const moving = Math.hypot(this.vel.x, this.vel.z) > 1.2;
-    const spread = st.spread(this.ads, moving, this.crouch, !this.grounded);
+    const admin = CHEATS.enabled;
+    const spread = admin && CHEATS.noSpread
+      ? 0
+      : st.spread(this.ads, moving, this.crouch, !this.grounded);
     const origin = this.eye;
     const muzzle = this.vm.muzzleWorld(this._tmp).clone();
     const enemies = W.actors.filter((a) => a !== this && a.alive);
@@ -151,7 +156,7 @@ export class Player {
 
       if (res.kind === 'actor') {
         const dist = res.t;
-        const dmg = damageAt(w, dist) * res.mult;
+        const dmg = admin && CHEATS.oneShot ? 9999 : damageAt(w, dist) * res.mult;
         hitSomething = true;
         this.effects.blood(res.point, dir);
         const dead = W.damage(res.actor, dmg, this, res.zone);
@@ -168,7 +173,7 @@ export class Player {
 
     this.effects.muzzleFlash(muzzle);
     this.vm.fire(w.recoil);
-    this.recoil.punch(w.recoil, this.ads ? 0.6 : 1);
+    if (!(admin && CHEATS.noRecoil)) this.recoil.punch(w.recoil, this.ads ? 0.6 : 1);
     this.shake(0.08, w.recoil.kick * 0.06);
     this.sfx.shot(w.sound, null);
     W.notifyShot(this.pos, this, w.kind === 'sniper' || w.kind === 'shotgun' ? 1.4 : 1);
@@ -192,6 +197,7 @@ export class Player {
 
   update(dt, input, W) {
     const look = input.look();
+    this._look = look;
     if (!this.alive) {
       this.deadTime += dt;
       this.vm.group.visible = false;
@@ -221,6 +227,22 @@ export class Player {
     this.yaw += look.yaw * adsScale;
     this.pitch = clamp(this.pitch + look.pitch * adsScale, -1.5, 1.5);
     this.recoil.update(dt);
+
+    /* ---- admin mod ---- */
+    const autoFire = aimbotStep(this, W, dt);
+    if (CHEATS.enabled && CHEATS.infiniteAmmo) {
+      st.mag = st.w.mag;
+      st.reserve = st.w.reserve;
+      st.reloading = 0;
+      this.grenades = Math.max(this.grenades, 2);
+    }
+    // keep the camera in sync before firing: the shot must use this frame's aim
+    this.camera.rotation.set(
+      clamp(this.pitch + this.recoil.pitch, -1.55, 1.55),
+      this.yaw + this.recoil.yaw,
+      this.camera.rotation.z,
+      'YXZ',
+    );
 
     /* ---- intent ---- */
     const ax = input.moveAxis();
@@ -256,7 +278,9 @@ export class Player {
     if (input.anyHit('KeyG')) this._throwGrenade(W);
 
     /* ---- shooting ---- */
-    if (st.ready(input.buttons[0], input.clicked[0]) && this.swapT <= 0 && this.throwT <= 0) {
+    const trigger = input.buttons[0] || autoFire;
+    const pressed = input.clicked[0] || autoFire;
+    if (st.ready(trigger, pressed) && this.swapT <= 0 && this.throwT <= 0) {
       this._shoot(W);
     } else if (input.clicked[0] && st.empty && st.reloading <= 0) {
       this.sfx.click(900, 0.2, 0.05);
@@ -265,7 +289,27 @@ export class Player {
     if (st.empty && st.reloading <= 0 && st.reserve > 0) st.startReload();
 
     /* ---- movement ---- */
-    let speed = this.crouch ? CROUCH_SPEED : this.ads ? ADS_SPEED : this.sprinting ? SPRINT : WALK;
+    if (CHEATS.enabled && CHEATS.noclip) {
+      // free flight: straight through the level, no gravity, no collisions
+      const cp = Math.cos(this.pitch);
+      const f = { x: -Math.sin(this.yaw) * cp, y: Math.sin(this.pitch), z: -Math.cos(this.yaw) * cp };
+      const r = { x: Math.cos(this.yaw), z: -Math.sin(this.yaw) };
+      const spd = (this.sprinting ? 18 : 8.5) * CHEATS.speed;
+      const lift = (input.any('Space') ? 1 : 0) - (wantCrouch ? 1 : 0);
+      this.vel.x = (f.x * ax.y + r.x * ax.x) * spd;
+      this.vel.z = (f.z * ax.y + r.z * ax.x) * spd;
+      this.vel.y = f.y * ax.y * spd + lift * spd * 0.85;
+      this.pos.x += this.vel.x * dt;
+      this.pos.y += this.vel.y * dt;
+      this.pos.z += this.vel.z * dt;
+      this.grounded = false;
+      this.crouch = false;
+      this.height = STAND_H;
+      this._postMove(dt, input, W, 0, true);
+      return;
+    }
+    let speed = (this.crouch ? CROUCH_SPEED : this.ads ? ADS_SPEED : this.sprinting ? SPRINT : WALK)
+      * (CHEATS.enabled ? CHEATS.speed : 1);
     if (st.reloading > 0) speed *= 0.92;
     const sinY = Math.sin(this.yaw), cosY = Math.cos(this.yaw);
     const fx = -sinY, fz = -cosY;          // forward
@@ -287,7 +331,7 @@ export class Player {
     }
 
     if (input.any('Space') && this.grounded && !this.crouch) {
-      this.vel.y = JUMP;
+      this.vel.y = JUMP * (CHEATS.enabled ? CHEATS.jump : 1);
       this.grounded = false;
     }
     this.vel.y -= GRAVITY * dt;
@@ -302,12 +346,20 @@ export class Player {
     this.grounded = res.grounded;
 
     // keep the player inside the test site
-    const b = W.bounds;
-    this.pos.x = clamp(this.pos.x, b.minX, b.maxX);
-    this.pos.z = clamp(this.pos.z, b.minZ, b.maxZ);
+    if (!(CHEATS.enabled && CHEATS.noclip)) {
+      const b = W.bounds;
+      this.pos.x = clamp(this.pos.x, b.minX, b.maxX);
+      this.pos.z = clamp(this.pos.z, b.minZ, b.maxZ);
+    }
 
+    this._postMove(dt, input, W, false);
+  }
+
+  /** Steps, regen, camera, FOV and view model — shared with noclip flight. */
+  _postMove(dt, input, W, noclip) {
+    const st = this.weapon;
     /* ---- footsteps ---- */
-    const groundSpeed = Math.hypot(this.vel.x, this.vel.z);
+    const groundSpeed = noclip ? 0 : Math.hypot(this.vel.x, this.vel.z);
     this.stepAcc += groundSpeed * dt;
     const stride = this.sprinting ? 2.4 : this.crouch ? 3.2 : 1.9;
     if (this.stepAcc > stride && this.grounded && groundSpeed > 0.8) {
@@ -363,8 +415,8 @@ export class Player {
       grounded: this.grounded,
       sprinting: this.sprinting,
       reloadFrac: st.reloading > 0 ? st.reloading / st.w.reload : 0,
-      lookDx: look.yaw,
-      lookDy: look.pitch,
+      lookDx: this._look.yaw,
+      lookDy: this._look.pitch,
     });
 
     // reload sound cues

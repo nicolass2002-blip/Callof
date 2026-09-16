@@ -12,6 +12,9 @@ import { Player } from './game/player.js';
 import { Match, MATCH } from './game/match.js';
 import { WEAPONS, PRIMARIES } from './game/weapons.js';
 import { DIFFICULTY } from './game/bots.js';
+import { CHEATS, loadCheats, activeLabels, ACTIONS } from './game/cheats.js';
+import { AdminPanel } from './ui/admin.js';
+import { Esp } from './ui/esp.js';
 import { Hud } from './ui/hud.js';
 import { Minimap } from './ui/minimap.js';
 import { clamp, fmtTime } from './core/util.js';
@@ -78,7 +81,7 @@ function resize() {
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
-addEventListener('resize', resize);
+addEventListener('resize', () => { resize(); esp?.resize(); });
 
 /* --------------------------------- world -------------------------------- */
 
@@ -86,7 +89,7 @@ const input = new Input(canvas);
 const sfx = new Sfx();
 const hud = new Hud();
 
-let world, nav, effects, player, match, minimap;
+let world, nav, effects, player, match, minimap, esp, admin;
 let state = 'loading';         // loading | menu | play | pause | end
 let lastTime = performance.now();
 let scoreboardShown = false;
@@ -105,6 +108,15 @@ $('hud').appendChild(scopeEl);
 const flashEl = document.createElement('div');
 flashEl.style.cssText = 'position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:60;transition:opacity .9s';
 document.body.appendChild(flashEl);
+
+function toast(msg) {
+  const box = $('toast');
+  const d = document.createElement('div');
+  d.textContent = msg;
+  box.appendChild(d);
+  setTimeout(() => d.remove(), 2000);
+  while (box.children.length > 4) box.firstElementChild.remove();
+}
 
 /* ------------------------------- loading -------------------------------- */
 
@@ -136,6 +148,16 @@ async function boot() {
   effects = new Effects(scene, sfx);
   player = new Player(camera, scene, sfx, effects, { primary: settings.primary, fov: settings.fov });
   minimap = new Minimap($('minimap'), world);
+  esp = new Esp($('hud'));
+
+  loadCheats();
+  admin = new AdminPanel({
+    getPlayer: () => player,
+    getMatch: () => match,
+    toast,
+    onOpen: () => { input.unlock(); },
+    onClose: () => { if (state === 'play') input.lock(); },
+  });
 
   buildMenus();
   $('loading').classList.add('hidden');
@@ -199,12 +221,14 @@ function buildMenus() {
   }
 
   $('btn-start').onclick = () => startMatch();
+  $('btn-admin').onclick = () => admin.show();
+  $('p-admin').onclick = () => admin.show();
   $('btn-again').onclick = () => { $('endgame').classList.add('hidden'); startMatch(); };
   $('btn-resume').onclick = () => resume();
   $('btn-quit').onclick = () => quitToMenu();
 
   input.onLockChange = (locked) => {
-    if (!locked && state === 'play') pause();
+    if (!locked && state === 'play' && !admin.open) pause();
   };
 }
 
@@ -231,6 +255,7 @@ function startMatch() {
   player.baseFov = settings.fov;
   player.kills = 0; player.deaths = 0; player.streak = 0; player.bestStreak = 0;
   player.shotsFired = 0; player.shotsHit = 0;
+  CHEATS.used = false;
 
   match = new Match({
     scene, collider: world.collider, nav, spawns: world.spawns, bounds: world.bounds,
@@ -339,6 +364,7 @@ function endMatch(e) {
   $('eg-kd').textContent = (player.kills / Math.max(1, player.deaths)).toFixed(2);
   $('eg-acc').textContent = `${acc.toFixed(1)}%`;
   $('eg-streak').textContent = player.bestStreak;
+  $('eg-cheats').classList.toggle('hidden', !CHEATS.used);
   setTimeout(() => {
     if (state === 'end') $('endgame').classList.remove('hidden');
   }, 3200);
@@ -371,6 +397,15 @@ function paintClock(secs) {
   g.fillText('SURVIVAL TOWN · NTS', 128, 200);
   g.fillText(`${match ? match.score.A : 0} — ${match ? match.score.B : 0}`, 128, 226);
   c.texture.needsUpdate = true;
+}
+
+let cheatStatusKey = '';
+function paintCheatStatus() {
+  const labels = activeLabels();
+  const key = labels.join('|');
+  if (key === cheatStatusKey) return;
+  cheatStatusKey = key;
+  $('cheat-status').innerHTML = labels.map((l) => `<i>${l}</i>`).join('');
 }
 
 /* -------------------------------- loop ---------------------------------- */
@@ -411,6 +446,8 @@ function frame(now) {
     scopeEl.style.display = player.scoped ? 'block' : 'none';
     minimap.draw(player, match.minimapActors(), match.grenadeSys.items);
     paintClock(match.clock);
+    esp.draw(player, match, camera);
+    paintCheatStatus();
 
     if (!player.alive) hud.respawn(true, undefined, match.respawnTimeLeft(player));
 
@@ -422,6 +459,7 @@ function frame(now) {
 
     if (input.hit('Escape')) pause();
   } else if (state === 'end' && nukeState) {
+    esp?.clear();
     nukeState.t += dt;
     const t = nukeState.t;
     nukeState.g.scale.setScalar(clamp(0.05 + t * 0.5, 0.05, 1.15));
@@ -450,7 +488,20 @@ function frame(now) {
 
 addEventListener('keydown', (e) => {
   if (e.code === 'Escape' && state === 'pause') resume();
+  if (e.code === 'Escape' && admin?.open) { admin.hide(); return; }
   if (e.code === 'Enter' && state === 'menu') startMatch();
+  // admin mod: F1 panel, F2..F8 quick toggles, T teleport
+  if (admin && (e.code === 'F1' || /^F[2-8]$/.test(e.code))) {
+    e.preventDefault();
+    admin.hotkey(e.code);
+    return;
+  }
+  if (e.code === 'KeyT' && state === 'play' && CHEATS.enabled && match && player?.alive) {
+    e.preventDefault();
+    ACTIONS.teleport({ player, match });
+    CHEATS.used = true;
+    toast('TÉLÉPORTATION');
+  }
 });
 canvas.addEventListener('click', () => {
   if (state === 'play' && !input.locked) input.lock();
@@ -465,5 +516,6 @@ boot().catch((err) => {
 window.NUKETOWN = {
   get match() { return match; }, get player() { return player; },
   get world() { return world; }, get nav() { return nav; },
-  settings, DIFFICULTY,
+  get admin() { return admin; }, get input() { return input; },
+  CHEATS, settings, DIFFICULTY,
 };

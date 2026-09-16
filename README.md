@@ -66,6 +66,33 @@ Dégâts dégressifs avec la distance, multiplicateur à la tête, régénérati
 santé après 4 s sans encaisser, grenades à fragmentation avec rebonds et
 dégâts de zone occultés par les murs.
 
+## Mod admin (triches)
+
+Le jeu est entièrement hors ligne contre des bots : le mod admin est donc un
+bac à sable / outil de debug, pas un contournement d'anti-triche.
+
+Ouvrez-le depuis **MOD ADMIN** dans le menu principal, dans le menu pause, ou
+avec **F1** en pleine partie (la souris est libérée, le match continue à
+tourner pour régler l'aimbot en direct). Tout est mémorisé dans le
+`localStorage`, et l'interrupteur « Mod actif » coupe l'ensemble d'un coup.
+
+| Section | Options |
+| --- | --- |
+| **Joueur** | Mode invincible, noclip (vol libre à travers les murs), munitions infinies, élimination en un coup, aucun recul, aucune dispersion, multiplicateurs de vitesse et de détente |
+| **Aimbot** | Activation, tir automatique, visée à travers les murs, verrouillage de la cible, point visé (tête/torse), cône de capture 2→180°, réactivité 1→100 (snap instantané). Compense le recul et affiche un cercle sur la cible verrouillée |
+| **ESP** | Boîtes, noms, barres de vie, distance, squelette, traceurs, inclusion des alliés, radar complet sur la mini-carte, portée réglable. Trait plein = cible en vue, pointillé = derrière un mur |
+| **Monde** | Geler les bots, restaurer la santé, recharger tout, téléportation au réticule, éliminer tous les ennemis, remettre le score à zéro, terminer le match |
+
+Raccourcis : `F1` panneau · `F2` invincible · `F3` noclip · `F4` aimbot ·
+`F5` ESP · `F6` geler les bots · `F7` munitions infinies · `F8` one shot ·
+`T` téléportation au réticule.
+
+Les options actives sont listées en jaune en haut à gauche du HUD, et l'écran
+de fin de match signale que les statistiques ont été obtenues avec le mod.
+
+En noclip : `ZQSD` pour voler dans l'axe du regard, `Espace` / `Ctrl` pour
+monter et descendre, `Maj` pour aller plus vite.
+
 ## La carte
 
 ```
@@ -105,6 +132,7 @@ src/
     nuketown.js        la carte : maisons, véhicules, props, spawns, horloge
     nav.js             graphe de navigation échantillonné + plus courts chemins
   game/
+    cheats.js          mod admin : état, aimbot, actions ponctuelles
     weapons.js         données d'armes, munitions, view model, recul caméra
     combat.js          hitscan, zones de dégâts, effets, grenades
     player.js          déplacement, caméra, tir, santé du joueur
@@ -112,6 +140,8 @@ src/
     soldier.js         soldat low-poly animé (jambes, bras, visée, chute)
     match.js           équipes, spawns, dégâts, score, feed d'éliminations
   ui/
+    admin.js           panneau du mod admin (interface générée depuis un schéma)
+    esp.js             surcouche ESP projetée en 2D au-dessus de la scène
     hud.js             santé, munitions, feed, scores, indicateurs de dégâts
     minimap.js         mini-carte tournante rendue depuis les boîtes de collision
 ```

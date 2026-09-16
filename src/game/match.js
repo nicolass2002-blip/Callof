@@ -4,6 +4,7 @@ import { clamp, rand, choice, gauss, callsigns } from '../core/util.js';
 import { hitscan, damageAt, Grenades } from './combat.js';
 import { Bot, DIFFICULTY } from './bots.js';
 import { WEAPONS, PRIMARIES } from './weapons.js';
+import { CHEATS } from './cheats.js';
 
 export const MATCH = { scoreLimit: 75, duration: 600, teamSize: 6 };
 
@@ -235,7 +236,9 @@ export class Match {
     this.time += dt;
     this.clock = Math.max(0, this.clock - dt);
 
-    for (const b of this.bots) b.update(dt, this);
+    if (!(CHEATS.enabled && CHEATS.freezeBots)) {
+      for (const b of this.bots) b.update(dt, this);
+    }
     if (this.player.alive && this.player.pos.y < -3) this.rescue(this.player);
 
     this.grenadeSys.update(dt, (g) => {
@@ -285,6 +288,7 @@ export class Match {
     for (const a of this.actors) {
       if (!a.alive || a === this.player) continue;
       if (a.team === this.player.team) out.push({ a, known: true });
+      else if (CHEATS.enabled && CHEATS.esp.radar) out.push({ a, known: false });
       else {
         const t = this.recentFire.get(a);
         if (t !== undefined && this.time - t < 2.6) out.push({ a, known: false });
