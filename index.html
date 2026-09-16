@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>OPERATION NUKETOWN</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23121417'/%3E%3Cpath d='M16 5l3.2 6.5 7.2 1-5.2 5 1.2 7.1L16 21.3 9.6 24.6l1.2-7.1-5.2-5 7.2-1z' fill='%23ffcb3d'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="styles/main.css" />
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<!-- ============================ IN-GAME HUD ============================ -->
+<div id="hud" class="hidden">
+  <div id="crosshair"><span class="ch t"></span><span class="ch b"></span><span class="ch l"></span><span class="ch r"></span><span class="ch dot"></span></div>
+  <div id="hitmarker"></div>
+  <div id="damage-vignette"></div>
+  <div id="hit-dirs"></div>
+
+  <div id="hud-bottom-left">
+    <div id="health-wrap">
+      <div id="health-bar"><i></i></div>
+      <div id="health-txt">100</div>
+    </div>
+    <div id="minimap-wrap"><canvas id="minimap" width="240" height="240"></canvas></div>
+  </div>
+
+  <div id="hud-bottom-right">
+    <div id="ammo">
+      <span id="ammo-mag">30</span><span id="ammo-sep">/</span><span id="ammo-res">120</span>
+    </div>
+    <div id="weapon-name">M4A1</div>
+    <div id="gear">
+      <span id="grenades">✦ <b>2</b></span>
+      <span id="firemode">AUTO</span>
+    </div>
+    <div id="reload-hint" class="hidden">RECHARGER [R]</div>
+  </div>
+
+  <div id="hud-top">
+    <div class="team-score t-a"><span class="tag">ALLIÉS</span><span id="score-a">0</span></div>
+    <div id="clock">10:00</div>
+    <div class="team-score t-b"><span id="score-b">0</span><span class="tag">AXIS</span></div>
+  </div>
+
+  <div id="killfeed"></div>
+  <div id="streak-banner"></div>
+  <div id="respawn-overlay" class="hidden">
+    <div class="ro-title">ÉLIMINÉ</div>
+    <div class="ro-by">par <span id="ro-killer">—</span></div>
+    <div class="ro-timer">RÉAPPARITION DANS <span id="ro-count">3</span></div>
+  </div>
+
+  <div id="scoreboard" class="hidden">
+    <h2>NUKETOWN — MATCH À MORT PAR ÉQUIPE</h2>
+    <div class="sb-cols">
+      <div class="sb-team">
+        <div class="sb-head t-a">ALLIÉS <span id="sb-score-a">0</span></div>
+        <table><thead><tr><th>OPÉRATEUR</th><th>K</th><th>D</th><th>PING</th></tr></thead><tbody id="sb-a"></tbody></table>
+      </div>
+      <div class="sb-team">
+        <div class="sb-head t-b">AXIS <span id="sb-score-b">0</span></div>
+        <table><thead><tr><th>OPÉRATEUR</th><th>K</th><th>D</th><th>PING</th></tr></thead><tbody id="sb-b"></tbody></table>
+      </div>
+    </div>
+    <div class="sb-foot">Maintenir [TAB]</div>
+  </div>
+</div>
+
+<!-- ============================== MENUS =============================== -->
+<div id="menu" class="screen">
+  <div class="bg-grid"></div>
+  <div class="menu-inner">
+    <h1 class="logo">OPERATION<span>NUKETOWN</span></h1>
+    <p class="tagline">Simulation de combat · Site d'essais nucléaires du Nevada · 1962</p>
+
+    <div class="panel">
+      <div class="panel-col">
+        <h3>Équipement</h3>
+        <div id="loadout-list" class="chips"></div>
+        <h3>Difficulté des bots</h3>
+        <div id="difficulty-list" class="chips">
+          <button class="chip" data-diff="recruit">Recrue</button>
+          <button class="chip sel" data-diff="regular">Régulier</button>
+          <button class="chip" data-diff="veteran">Vétéran</button>
+          <button class="chip" data-diff="realism">Réalisme</button>
+        </div>
+        <h3>Réglages</h3>
+        <label class="slider">Sensibilité <input id="set-sens" type="range" min="10" max="300" value="100" /><output>1.00</output></label>
+        <label class="slider">Champ de vision <input id="set-fov" type="range" min="65" max="110" value="85" /><output>85</output></label>
+        <label class="slider">Volume <input id="set-vol" type="range" min="0" max="100" value="70" /><output>70</output></label>
+        <label class="slider">Qualité <input id="set-quality" type="range" min="0" max="2" step="1" value="2" /><output>Élevée</output></label>
+      </div>
+      <div class="panel-col">
+        <h3>Commandes</h3>
+        <ul class="keys">
+          <li><kbd>ZQSD</kbd> / <kbd>WASD</kbd><span>Déplacement</span></li>
+          <li><kbd>Souris</kbd><span>Viser</span></li>
+          <li><kbd>Clic G</kbd><span>Tirer</span></li>
+          <li><kbd>Clic D</kbd><span>Visée précise</span></li>
+          <li><kbd>Maj</kbd><span>Sprint</span></li>
+          <li><kbd>Ctrl</kbd><span>S'accroupir</span></li>
+          <li><kbd>Espace</kbd><span>Sauter</span></li>
+          <li><kbd>R</kbd><span>Recharger</span></li>
+          <li><kbd>1</kbd> <kbd>2</kbd> / <kbd>Molette</kbd><span>Changer d'arme</span></li>
+          <li><kbd>G</kbd><span>Grenade</span></li>
+          <li><kbd>B</kbd><span>Mode de tir</span></li>
+          <li><kbd>Tab</kbd><span>Scores</span></li>
+          <li><kbd>Échap</kbd><span>Pause</span></li>
+        </ul>
+        <div class="brief">
+          <h3>Objectif</h3>
+          <p>Premier camp à <b id="brief-target">75</b> éliminations, ou score le plus élevé après <b>10 minutes</b>.
+          Deux pavillons, une rue, aucun endroit sûr.</p>
+        </div>
+      </div>
+    </div>
+
+    <button id="btn-start" class="cta">DÉPLOIEMENT</button>
+    <p class="hint">La souris est capturée au lancement · <kbd>Échap</kbd> pour la libérer</p>
+  </div>
+</div>
+
+<div id="pause" class="screen hidden">
+  <div class="menu-inner narrow">
+    <h2>PAUSE</h2>
+    <label class="slider">Sensibilité <input id="p-sens" type="range" min="10" max="300" value="100" /><output>1.00</output></label>
+    <label class="slider">Champ de vision <input id="p-fov" type="range" min="65" max="110" value="85" /><output>85</output></label>
+    <label class="slider">Volume <input id="p-vol" type="range" min="0" max="100" value="70" /><output>70</output></label>
+    <button id="btn-resume" class="cta">REPRENDRE</button>
+    <button id="btn-quit" class="cta ghost">QUITTER LE MATCH</button>
+  </div>
+</div>
+
+<div id="endgame" class="screen hidden">
+  <div class="menu-inner narrow">
+    <h2 id="eg-result">VICTOIRE</h2>
+    <div id="eg-score">75 — 43</div>
+    <table class="eg-stats">
+      <tr><th>Éliminations</th><td id="eg-k">0</td></tr>
+      <tr><th>Morts</th><td id="eg-d">0</td></tr>
+      <tr><th>Ratio</th><td id="eg-kd">0.00</td></tr>
+      <tr><th>Précision</th><td id="eg-acc">0%</td></tr>
+      <tr><th>Meilleure série</th><td id="eg-streak">0</td></tr>
+    </table>
+    <button id="btn-again" class="cta">NOUVEAU MATCH</button>
+  </div>
+</div>
+
+<div id="loading" class="screen">
+  <div class="menu-inner narrow">
+    <h2>CHARGEMENT</h2>
+    <div class="loadbar"><i></i></div>
+    <p id="loading-txt">Initialisation du site d'essais…</p>
+  </div>
+</div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
